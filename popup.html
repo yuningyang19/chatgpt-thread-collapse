@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>ChatGPT Thread Lite</title>
+    <link rel="stylesheet" href="popup.css">
+  </head>
+  <body>
+    <main class="popup">
+      <header class="popup-header">
+        <h1>ChatGPT Thread Lite</h1>
+        <p>半虚拟化旧 assistant 消息，减少长对话页面卡顿。</p>
+      </header>
+
+      <section class="panel">
+        <label class="toggle-row">
+          <span>启用扩展</span>
+          <input id="enabled" type="checkbox">
+        </label>
+
+        <label class="field">
+          <span>最近保留展开的 assistant 条数</span>
+          <input id="keepRecentCount" type="number" min="1" max="50" step="1">
+        </label>
+
+        <label class="toggle-row">
+          <span>优先折叠含代码 / 公式的旧消息</span>
+          <input id="autoCollapseComplex" type="checkbox">
+        </label>
+
+        <label class="toggle-row">
+          <span>极致省内存模式（不缓存完整节点）</span>
+          <input id="extremeMemoryMode" type="checkbox">
+        </label>
+
+        <label class="toggle-row">
+          <span>开发者调试模式</span>
+          <input id="debugMode" type="checkbox">
+        </label>
+      </section>
+
+      <section class="panel">
+        <div class="panel-title">当前会话控制</div>
+        <div class="hint" id="pageStateHint">正在读取当前页面状态…</div>
+        <button id="expandNearby" class="action-btn">展开当前视口附近消息</button>
+        <button id="expandAll" class="action-btn action-btn-primary">展开当前会话全部已折叠消息</button>
+        <button id="restorePreviousCollapsed" class="action-btn">恢复上次折叠视图</button>
+        <button id="recollapseOld" class="action-btn">重新折叠当前会话旧消息</button>
+        <button id="resetSession" class="action-btn action-btn-danger">重置当前会话状态</button>
+      </section>
+
+      <footer class="footer">
+        <span id="saveStatus">设置会自动保存。</span>
+      </footer>
+    </main>
+
+    <script src="popup.js"></script>
+  </body>
+</html>

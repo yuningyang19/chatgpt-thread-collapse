@@ -1,0 +1,149 @@
+{
+  "extensionName": {
+    "message": "ChatGPT 对话折叠"
+  },
+  "extensionDescription": {
+    "message": "对 ChatGPT 长对话中的旧 assistant 消息做半虚拟化折叠，降低卡顿并保留可恢复能力。"
+  },
+  "popupTitle": {
+    "message": "ChatGPT 对话折叠"
+  },
+  "popupSubtitle": {
+    "message": "对旧 assistant 消息进行半虚拟化与懒恢复，减少长对话页面卡顿。"
+  },
+  "enableExtension": {
+    "message": "启用扩展"
+  },
+  "recentKeepCount": {
+    "message": "最近保留展开的 assistant 条数"
+  },
+  "collapseComplex": {
+    "message": "优先折叠含代码 / 公式的旧消息"
+  },
+  "extremeMemoryMode": {
+    "message": "极致省内存模式（不缓存完整节点）"
+  },
+  "debugMode": {
+    "message": "开发者调试模式"
+  },
+  "sessionControls": {
+    "message": "当前会话控制"
+  },
+  "loadingPageState": {
+    "message": "正在读取当前页面状态…"
+  },
+  "currentSummary": {
+    "message": "当前会话 assistant {0} 条，已折叠 {1} 条，视口附近可恢复 {2} 条{3}。"
+  },
+  "extremeSummarySuffix": {
+    "message": "，极致省内存模式已开启"
+  },
+  "notChatgptTab": {
+    "message": "当前标签页未检测到可管理的 ChatGPT 会话。"
+  },
+  "saveStatus": {
+    "message": "设置已保存。"
+  },
+  "settingsAutoSave": {
+    "message": "设置会自动保存。"
+  },
+  "expandNearby": {
+    "message": "展开当前视口附近消息"
+  },
+  "expandAll": {
+    "message": "展开当前会话全部已折叠消息"
+  },
+  "restorePrevious": {
+    "message": "恢复上次折叠视图"
+  },
+  "recollapseOld": {
+    "message": "重新折叠当前会话旧消息"
+  },
+  "resetSession": {
+    "message": "重置当前会话状态"
+  },
+  "unableReadPageState": {
+    "message": "无法读取当前页面状态。请确认当前标签页已打开 ChatGPT。"
+  },
+  "expandAllConfirm": {
+    "message": "展开全部会恢复当前会话中所有已折叠 assistant 消息，可能重新引入较多 DOM，短时间内会影响性能。是否继续？"
+  },
+  "resetSessionConfirm": {
+    "message": "这会清除当前会话的手动展开、锁定和折叠记录。是否继续？"
+  },
+  "cannotExpandExtreme": {
+    "message": "极致省内存模式下无法完整恢复全部消息。"
+  },
+  "extremeMemoryDisabledExpandNearby": {
+    "message": "极致省内存模式下无法恢复视口附近消息。"
+  },
+  "assistantMessage": {
+    "message": "Assistant message"
+  },
+  "collapsedMessage": {
+    "message": "已折叠该消息"
+  },
+  "complexCollapsed": {
+    "message": "复杂内容已轻量化"
+  },
+  "collapsedHint": {
+    "message": "旧消息已轻量化"
+  },
+  "clickToRestore": {
+    "message": "可点击恢复"
+  },
+  "noFullNodeCached": {
+    "message": "未缓存完整节点"
+  },
+  "expand": {
+    "message": "展开"
+  },
+  "expandAllHeader": {
+    "message": "一键展开"
+  },
+  "collapseAllHeader": {
+    "message": "一键折叠"
+  },
+  "collapse": {
+    "message": "折叠"
+  },
+  "lock": {
+    "message": "锁定"
+  },
+  "locked": {
+    "message": "已锁定"
+  },
+  "permanentExpand": {
+    "message": "永久展开本条"
+  },
+  "restoreDefaultFold": {
+    "message": "恢复默认折叠"
+  },
+  "collapseAllToast": {
+    "message": "已折叠 {0} 条消息。"
+  },
+  "expandNearbyToast": {
+    "message": "已恢复视口附近 {0} 条消息。"
+  },
+  "expandAllToast": {
+    "message": "已恢复 {0} 条消息。可通过“恢复上次折叠视图”回退。"
+  },
+  "noCollapsedMessages": {
+    "message": "当前会话没有已折叠消息。"
+  },
+  "noNearbyCollapsedMessages": {
+    "message": "当前视口附近没有可恢复的折叠消息。"
+  },
+  "sessionResetDone": {
+    "message": "当前会话状态已重置。"
+  },
+  "noPreviousCollapsedView": {
+    "message": "没有可恢复的上次折叠视图。"
+  },
+  "restoredPreviousCollapsedView": {
+    "message": "已恢复到上次折叠视图。"
+  },
+  "recollapsedOldMessages": {
+    "message": "已重新按当前策略折叠旧消息。"
+  }
+}

@@ -1,0 +1,149 @@
+{
+  "extensionName": {
+    "message": "ChatGPT Thread Collapse"
+  },
+  "extensionDescription": {
+    "message": "Semi-virtualize old assistant messages in long ChatGPT threads to reduce lag while keeping them restorable."
+  },
+  "popupTitle": {
+    "message": "ChatGPT Thread Collapse"
+  },
+  "popupSubtitle": {
+    "message": "Semi-virtualize and lazily restore old assistant messages to reduce long-thread lag."
+  },
+  "enableExtension": {
+    "message": "Enable extension"
+  },
+  "recentKeepCount": {
+    "message": "Keep the latest assistant messages expanded"
+  },
+  "collapseComplex": {
+    "message": "Prefer collapsing code/math-heavy old messages"
+  },
+  "extremeMemoryMode": {
+    "message": "Extreme memory-saving mode (do not cache full nodes)"
+  },
+  "debugMode": {
+    "message": "Developer debug mode"
+  },
+  "sessionControls": {
+    "message": "Current thread controls"
+  },
+  "loadingPageState": {
+    "message": "Reading current page state…"
+  },
+  "currentSummary": {
+    "message": "assistant messages: {0}, collapsed: {1}, near viewport: {2}{3}."
+  },
+  "extremeSummarySuffix": {
+    "message": ", extreme memory-saving mode enabled"
+  },
+  "notChatgptTab": {
+    "message": "No manageable ChatGPT conversation was detected in the current tab."
+  },
+  "saveStatus": {
+    "message": "Settings saved."
+  },
+  "settingsAutoSave": {
+    "message": "Settings are saved automatically."
+  },
+  "expandNearby": {
+    "message": "Expand nearby messages"
+  },
+  "expandAll": {
+    "message": "Expand all collapsed messages in this thread"
+  },
+  "restorePrevious": {
+    "message": "Restore previous collapsed view"
+  },
+  "recollapseOld": {
+    "message": "Re-collapse old messages in this thread"
+  },
+  "resetSession": {
+    "message": "Reset current thread state"
+  },
+  "unableReadPageState": {
+    "message": "Unable to read the current page state. Make sure this tab is a ChatGPT page."
+  },
+  "expandAllConfirm": {
+    "message": "Expanding all will restore every collapsed assistant message in the current thread and may reintroduce a lot of DOM, which can hurt performance briefly. Continue?"
+  },
+  "resetSessionConfirm": {
+    "message": "This will clear manual expand, lock, and collapsed records for the current thread. Continue?"
+  },
+  "cannotExpandExtreme": {
+    "message": "Full restore is unavailable in extreme memory-saving mode."
+  },
+  "extremeMemoryDisabledExpandNearby": {
+    "message": "Nearby restore is unavailable in extreme memory-saving mode."
+  },
+  "assistantMessage": {
+    "message": "Assistant message"
+  },
+  "collapsedMessage": {
+    "message": "Message collapsed"
+  },
+  "complexCollapsed": {
+    "message": "Complex content lightened"
+  },
+  "collapsedHint": {
+    "message": "Old message lightened"
+  },
+  "clickToRestore": {
+    "message": "Click to restore"
+  },
+  "noFullNodeCached": {
+    "message": "No full node cached"
+  },
+  "expand": {
+    "message": "Expand"
+  },
+  "expandAllHeader": {
+    "message": "Expand all"
+  },
+  "collapseAllHeader": {
+    "message": "Collapse all"
+  },
+  "collapse": {
+    "message": "Collapse"
+  },
+  "lock": {
+    "message": "Lock"
+  },
+  "locked": {
+    "message": "Locked"
+  },
+  "permanentExpand": {
+    "message": "Always keep this message expanded"
+  },
+  "restoreDefaultFold": {
+    "message": "Restore default fold"
+  },
+  "collapseAllToast": {
+    "message": "Collapsed {0} messages."
+  },
+  "expandNearbyToast": {
+    "message": "Restored {0} messages near the viewport."
+  },
+  "expandAllToast": {
+    "message": "Restored {0} messages. You can revert with the previous collapsed view."
+  },
+  "noCollapsedMessages": {
+    "message": "There are no collapsed messages in the current thread."
+  },
+  "noNearbyCollapsedMessages": {
+    "message": "No collapsed messages were found near the current viewport."
+  },
+  "sessionResetDone": {
+    "message": "Current thread state has been reset."
+  },
+  "noPreviousCollapsedView": {
+    "message": "There is no previous collapsed view to restore."
+  },
+  "restoredPreviousCollapsedView": {
+    "message": "Restored the previous collapsed view."
+  },
+  "recollapsedOldMessages": {
+    "message": "Re-applied the current collapse strategy to old messages."
+  }
+}
