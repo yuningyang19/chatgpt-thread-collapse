@@ -1,25 +1,29 @@
 # ChatGPT Thread Collapse
 
-A local Chrome extension for long ChatGPT threads. It semi-virtualizes older assistant messages so the page keeps fewer heavy DOM nodes in memory, which helps reduce lag without breaking the ability to restore content later.
+A very long ChatGPT web conversation can become noticeably sluggish, so this project started as an idea for a Chrome extension that folds long threads into a lighter view.
+
+This project was built in a vibe coding style using Codex.
+
+It is a local Chrome extension for long ChatGPT threads. The extension semi-virtualizes older assistant messages so the page keeps fewer heavy DOM nodes in memory, which helps reduce lag without breaking the ability to restore content later.
 
 ## What it does
 
-- Keeps the newest assistant messages expanded and folds older ones into lightweight placeholders
-- Restores a folded message only when you click expand
-- Preserves the original ChatGPT page as much as possible, including code blocks, equations, copy buttons, and normal scrolling
+- Collapses older assistant messages into lightweight placeholders while keeping recent replies expanded
+- Restores any folded message on demand
+- Keeps code blocks, equations, copy buttons, and normal scrolling intact as much as possible
 - Adds thread-level controls for expand all, collapse all, nearby expand, restore previous collapsed view, and reset thread state
 - Stores settings and per-thread state locally in `chrome.storage.local`
 
 ## Why it helps
 
-ChatGPT threads become slow mostly because many assistant messages stay in the DOM at once. This extension removes old assistant message nodes from layout flow and replaces them with compact placeholders, so the browser has less work to do.
+Long ChatGPT threads slow down because too many assistant messages stay mounted in the DOM. This extension detaches old heavy nodes and replaces them with compact placeholders, which reduces layout work and makes long conversations feel lighter.
 
-That gives you:
+That means:
 
+- Less DOM pressure while scrolling
 - Lower layout and paint cost on long conversations
-- Less DOM pressure during scrolling
-- Manual control over which messages stay expanded
-- A safer fallback than pure CSS collapsing, because the heavy nodes are actually detached
+- Manual control over what stays expanded
+- A more robust approach than pure CSS folding, because the heavy nodes are actually removed from the layout flow
 
 ## Install
 
@@ -104,4 +108,4 @@ gh auth status
 
 ## License
 
-Choose a license before publishing. If you want a permissive default, MIT is the simplest option.
+This repository is distributed under the MIT License. See [LICENSE](./LICENSE) for the full text.
