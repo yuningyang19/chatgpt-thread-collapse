@@ -3,7 +3,7 @@
 
   const DEFAULT_SETTINGS = {
     enabled: true,
-    keepRecentCount: 6,
+    keepRecentCount: 2,
     autoCollapseComplex: true,
     extremeMemoryMode: false,
     debugMode: false,

@@ -16,6 +16,17 @@
     "default_title": "ChatGPT Thread Lite",
     "default_popup": "popup.html"
   },
+  "web_accessible_resources": [
+    {
+      "resources": [
+        "page-observer.js"
+      ],
+      "matches": [
+        "https://chatgpt.com/*",
+        "https://chat.openai.com/*"
+      ]
+    }
+  ],
   "content_scripts": [
     {
       "matches": [
@@ -28,7 +39,7 @@
       "css": [
         "content.css"
       ],
-      "run_at": "document_idle"
+      "run_at": "document_start"
     }
   ]
 }

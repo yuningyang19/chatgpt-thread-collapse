@@ -104,6 +104,11 @@
   margin-top: 8px;
 }
 
+.cgpt-lite-contained-turn {
+  content-visibility: auto;
+  contain-intrinsic-size: 720px;
+}
+
 .cgpt-lite-toast {
   position: fixed;
   right: 16px;

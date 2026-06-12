@@ -6,10 +6,13 @@
     settings: "settings",
     sessionStates: "sessionStates"
   };
+  const PAGE_OBSERVER_SCRIPT = "page-observer.js";
+  const PAGE_OBSERVER_EVENT = `${EXTENSION_PREFIX}:network`;
+  const CONTAINED_TURN_CLASS = `${EXTENSION_PREFIX}-contained-turn`;
 
   const DEFAULT_SETTINGS = {
     enabled: true,
-    keepRecentCount: 6,
+    keepRecentCount: 2,
     autoCollapseComplex: true,
     extremeMemoryMode: false,
     debugMode: false,
@@ -144,8 +147,46 @@
       table: ["table"],
       list: ["ul", "ol"],
       quote: ["blockquote"]
-    }
+    },
+    composer: [
+      "textarea",
+      "[contenteditable='true']",
+      "[contenteditable='plaintext-only']",
+      "[data-testid*='composer']",
+      "[data-testid*='prompt-textarea']",
+      "[aria-label*='Message']",
+      "[aria-label*='Send']"
+    ],
+    extensionOwned: [
+      `.${EXTENSION_PREFIX}-toolbar`,
+      `.${EXTENSION_PREFIX}-global-controls`,
+      `.${EXTENSION_PREFIX}-placeholder`,
+      `.${EXTENSION_PREFIX}-toast`
+    ]
   };
+
+  const SCAN_TIMING = {
+    urgentDelay: 50,
+    normalDelay: 140,
+    typingQuietPeriod: 750,
+    idleTimeout: 450
+  };
+
+  const OBSERVER_CONFIG = {
+    childList: true,
+    subtree: true,
+    characterData: false,
+    attributes: false
+  };
+
+  const DATA_KEYS = {
+    messageId: `${camelCase(EXTENSION_PREFIX)}MessageId`,
+    placeholder: `${camelCase(EXTENSION_PREFIX)}Placeholder`
+  };
+
+  const EXTENSION_OWNED_SELECTOR = SELECTORS.extensionOwned.join(",");
+  const COMPOSER_SELECTOR = SELECTORS.composer.join(",");
+  const PAGE_NETWORK_EVENT_LIMIT = 80;
 
   const state = {
     settings: { ...DEFAULT_SETTINGS },
@@ -154,12 +195,20 @@
     messageRecords: new Map(),
     collapsedCache: new Map(),
     placeholderMap: new Map(),
+    pageNetworkEvents: [],
     observer: null,
+    observerRoot: null,
     scanTimer: null,
+    idleScanHandle: 0,
+    idleScanScheduled: false,
+    lastComposerInputAt: 0,
     debugCounter: 0,
     lastUrl: location.href,
     latestToastTimer: 0
   };
+
+  document.addEventListener(PAGE_OBSERVER_EVENT, handlePageNetworkEvent, true);
+  injectPageObserver();
 
   bootstrap().catch((error) => {
     console.error("[ChatGPT Thread Lite] bootstrap failed", error);
@@ -168,7 +217,7 @@
   async function bootstrap() {
     await loadPersistentState();
     bindRuntimeEvents();
-    scheduleScan("bootstrap");
+    scheduleScan("bootstrap", { urgent: true });
   }
 
   async function loadPersistentState() {
@@ -180,6 +229,7 @@
 
   function bindRuntimeEvents() {
     startObserver();
+    bindComposerActivityGuards();
 
     chrome.storage.onChanged.addListener((changes, areaName) => {
       if (areaName !== "local") {
@@ -214,6 +264,7 @@
     window.addEventListener("beforeunload", () => {
       disconnectObserver();
       clearTimeout(state.scanTimer);
+      cancelIdleScan();
     });
 
     setInterval(() => {
@@ -233,37 +284,142 @@
     state.messageRecords.clear();
     state.collapsedCache.clear();
     state.placeholderMap.clear();
-    scheduleScan("url changed");
+    state.pageNetworkEvents = [];
+    startObserver();
+    scheduleScan("url changed", { urgent: true });
+  }
+
+  function injectPageObserver() {
+    if (document.documentElement && document.documentElement.dataset[`${camelCase(EXTENSION_PREFIX)}PageObserver`] === "true") {
+      return;
+    }
+
+    const script = document.createElement("script");
+    script.src = chrome.runtime.getURL(PAGE_OBSERVER_SCRIPT);
+    script.async = false;
+    script.onload = () => script.remove();
+
+    const mount = document.documentElement || document.head;
+    if (!mount) {
+      document.addEventListener("DOMContentLoaded", injectPageObserver, { once: true });
+      return;
+    }
+
+    if (document.documentElement) {
+      document.documentElement.dataset[`${camelCase(EXTENSION_PREFIX)}PageObserver`] = "true";
+    }
+    mount.appendChild(script);
+  }
+
+  function bindComposerActivityGuards() {
+    const markComposerActivity = (event) => {
+      if (isComposerNode(event.target)) {
+        state.lastComposerInputAt = Date.now();
+      }
+    };
+
+    document.addEventListener("input", markComposerActivity, true);
+    document.addEventListener("keydown", markComposerActivity, true);
+    document.addEventListener("compositionstart", markComposerActivity, true);
+    document.addEventListener("compositionend", markComposerActivity, true);
+  }
+
+  function handlePageNetworkEvent(event) {
+    if (typeof event.detail !== "string") {
+      return;
+    }
+
+    let detail;
+    try {
+      detail = JSON.parse(event.detail);
+    } catch (error) {
+      handleSoftError(error);
+      return;
+    }
+
+    if (!detail || typeof detail !== "object") {
+      return;
+    }
+
+    const networkEvent = {
+      type: String(detail.type || "").slice(0, 32),
+      method: String(detail.method || "").slice(0, 16),
+      url: String(detail.url || "").slice(0, 300),
+      status: Number.parseInt(detail.status, 10) || 0,
+      contentType: String(detail.contentType || "").slice(0, 140),
+      contentLength: String(detail.contentLength || "").slice(0, 40),
+      at: Number.parseInt(detail.at, 10) || Date.now()
+    };
+
+    state.pageNetworkEvents.push(networkEvent);
+    if (state.pageNetworkEvents.length > PAGE_NETWORK_EVENT_LIMIT) {
+      state.pageNetworkEvents.splice(0, state.pageNetworkEvents.length - PAGE_NETWORK_EVENT_LIMIT);
+    }
+    debugLog("page network", networkEvent);
+  }
+
+  function isRelevantMutation(mutation) {
+    if (isInsideIgnoredArea(mutation.target)) {
+      return false;
+    }
+
+    if (mutation.type !== "childList") {
+      return false;
+    }
+
+    const changedNodes = [...mutation.addedNodes, ...mutation.removedNodes];
+    return changedNodes.some((node) => {
+      const element = getElementFromNode(node);
+      return element && !isInsideIgnoredArea(element);
+    });
+  }
+
+  function isInsideIgnoredArea(node) {
+    const element = getElementFromNode(node);
+    if (!element) {
+      return false;
+    }
+    return Boolean(element.closest(EXTENSION_OWNED_SELECTOR) || element.closest(COMPOSER_SELECTOR));
+  }
+
+  function isComposerNode(node) {
+    const element = getElementFromNode(node);
+    return Boolean(element && element.closest(COMPOSER_SELECTOR));
+  }
+
+  function getElementFromNode(node) {
+    if (node instanceof Element) {
+      return node;
+    }
+    return node && node.parentElement instanceof Element ? node.parentElement : null;
   }
 
   function startObserver() {
+    disconnectObserver();
+    const target = document.documentElement || document;
+    observeTarget(target);
+  }
+
+  function observeTarget(target) {
+    if (!target || state.observerRoot === target) {
+      return;
+    }
+
     disconnectObserver();
     state.observer = new MutationObserver((mutations) => {
       if (!state.settings.enabled) {
         return;
       }
 
-      const relevant = mutations.some((mutation) => {
-        if (mutation.type === "childList" && (mutation.addedNodes.length || mutation.removedNodes.length)) {
-          return true;
-        }
-        if (mutation.type === "characterData") {
-          return true;
-        }
-        return mutation.type === "attributes";
-      });
+      const relevant = mutations.some(isRelevantMutation);
 
       if (relevant) {
-        scheduleScan("mutation");
+        scheduleScan("mutation", { urgent: true });
       }
     });
 
-    state.observer.observe(document.documentElement, {
-      childList: true,
-      subtree: true,
-      characterData: true,
-      attributes: false
-    });
+    state.observer.observe(target, OBSERVER_CONFIG);
+    state.observerRoot = target;
   }
 
   function disconnectObserver() {
@@ -271,15 +427,62 @@
       state.observer.disconnect();
       state.observer = null;
     }
+    state.observerRoot = null;
   }
 
-  function scheduleScan(reason) {
+  function ensureConversationObserver(root) {
+    if (root && root !== state.observerRoot) {
+      observeTarget(root);
+    }
+  }
+
+  function scheduleScan(reason, options = {}) {
     clearTimeout(state.scanTimer);
+    cancelIdleScan();
+    const delay = getScanDelay(Boolean(options.urgent));
     state.scanTimer = window.setTimeout(() => {
+      state.scanTimer = null;
+      scheduleIdleScan(reason, Boolean(options.urgent));
+    }, delay);
+  }
+
+  function scheduleIdleScan(reason, urgent) {
+    const runScan = () => {
+      state.idleScanHandle = 0;
+      state.idleScanScheduled = false;
       scanAndApply(reason).catch((error) => {
         console.warn("[ChatGPT Thread Lite] scan failed", error);
       });
-    }, 180);
+    };
+
+    if (!urgent && typeof window.requestIdleCallback === "function") {
+      state.idleScanScheduled = true;
+      state.idleScanHandle = window.requestIdleCallback(runScan, { timeout: SCAN_TIMING.idleTimeout });
+      return;
+    }
+
+    runScan();
+  }
+
+  function cancelIdleScan() {
+    if (!state.idleScanHandle) {
+      return;
+    }
+    if (state.idleScanScheduled && typeof window.cancelIdleCallback === "function") {
+      window.cancelIdleCallback(state.idleScanHandle);
+    } else {
+      clearTimeout(state.idleScanHandle);
+    }
+    state.idleScanHandle = 0;
+    state.idleScanScheduled = false;
+  }
+
+  function getScanDelay(urgent) {
+    const sinceInput = Date.now() - state.lastComposerInputAt;
+    if (sinceInput >= 0 && sinceInput < SCAN_TIMING.typingQuietPeriod) {
+      return SCAN_TIMING.typingQuietPeriod - sinceInput;
+    }
+    return urgent ? SCAN_TIMING.urgentDelay : SCAN_TIMING.normalDelay;
   }
 
   async function scanAndApply(reason) {
@@ -289,10 +492,15 @@
       return;
     }
 
-    const messages = collectAssistantMessages();
-    applyGlobalHeaderControls();
-    applyToolbarControls(messages);
+    const root = findConversationRoot();
+    if (root) {
+      ensureConversationObserver(root);
+    }
+
+    const messages = collectAssistantMessages(root);
+    applyGlobalHeaderControls(messages);
     applyVirtualization(messages);
+    applyToolbarControls(messages);
     cleanupStaleCaches(messages);
     debugLog(`scan ${reason}`, {
       assistantCount: messages.length,
@@ -300,8 +508,7 @@
     });
   }
 
-  function collectAssistantMessages() {
-    const root = findConversationRoot();
+  function collectAssistantMessages(root = findConversationRoot()) {
     if (!root) {
       return [];
     }
@@ -335,7 +542,7 @@
     assistantMessages.forEach((record, index) => {
       record.order = index;
       if (record.node && record.node.dataset) {
-        record.node.dataset[`${camelCase(EXTENSION_PREFIX)}MessageId`] = record.id;
+        record.node.dataset[DATA_KEYS.messageId] = record.id;
       }
     });
 
@@ -446,14 +653,14 @@
       if (!record.node || !record.node.isConnected) {
         return;
       }
-      if (record.node.dataset[`${camelCase(EXTENSION_PREFIX)}Placeholder`] === "true") {
+      if (record.node.dataset[DATA_KEYS.placeholder] === "true") {
         return;
       }
       injectToolbar(record);
     });
   }
 
-  function applyGlobalHeaderControls() {
+  function applyGlobalHeaderControls(messages = []) {
     const anchor = findGlobalHeaderAnchor();
     if (!anchor) {
       return;
@@ -479,7 +686,7 @@
     const expandAllBtn = container.querySelector("[data-action='global-expand-all']");
     const collapseAllBtn = container.querySelector("[data-action='global-collapse-all']");
     const collapsedCount = getCollapsedIds().length;
-    const assistantCount = collectAssistantMessages().length;
+    const assistantCount = messages.length;
 
     if (expandAllBtn) {
       expandAllBtn.disabled = state.settings.extremeMemoryMode || collapsedCount === 0;
@@ -542,6 +749,10 @@
   }
 
   function syncToolbarState(record, toolbar) {
+    if (!toolbar) {
+      return;
+    }
+
     const collapsed = isCollapsed(record.id);
     const lockBtn = toolbar.querySelector("[data-action='lock']");
     const collapseBtn = toolbar.querySelector("[data-action='collapse']");
@@ -577,6 +788,7 @@
       const shouldCollapse = !isLatest && !keepBecauseManual && shouldPreferCollapse;
 
       if (shouldCollapse) {
+        setContainment(record.node, false);
         if (!record.collapsed) {
           collapseMessageSync(record.id, { manual: false });
         } else if (record.node && record.node.isConnected) {
@@ -585,9 +797,17 @@
       } else if (record.collapsed) {
         expandMessageSync(record.id, { manual: false, persist: false });
       } else {
+        setContainment(record.node, !isLatest);
         syncToolbarState(record, record.node.querySelector(`.${EXTENSION_PREFIX}-toolbar`) || null);
       }
     });
+  }
+
+  function setContainment(node, enabled) {
+    if (!node || !node.classList) {
+      return;
+    }
+    node.classList.toggle(CONTAINED_TURN_CLASS, Boolean(enabled));
   }
 
   async function collapseMessage(messageId, options) {
@@ -694,7 +914,7 @@
     const placeholder = document.createElement("section");
     placeholder.className = `${EXTENSION_PREFIX}-placeholder`;
     placeholder.dataset.messageId = record.id;
-    placeholder.dataset[`${camelCase(EXTENSION_PREFIX)}Placeholder`] = "true";
+    placeholder.dataset[DATA_KEYS.placeholder] = "true";
 
     const summaryNode = document.createElement("div");
     summaryNode.className = `${EXTENSION_PREFIX}-placeholder-summary`;
@@ -1047,7 +1267,7 @@
   }
 
   function getNodeText(node) {
-    return (node.innerText || node.textContent || "").trim();
+    return (node.textContent || "").trim();
   }
 
   function countMatches(root, selectors) {
