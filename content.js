@@ -172,6 +172,12 @@
     idleTimeout: 450
   };
 
+  const FAST_COLLAPSE = {
+    maxTurnsPerMutation: 12,
+    bottomDistancePx: 900,
+    bottomDistanceViewports: 1.2
+  };
+
   const OBSERVER_CONFIG = {
     childList: true,
     subtree: true,
@@ -184,6 +190,7 @@
     placeholder: `${camelCase(EXTENSION_PREFIX)}Placeholder`
   };
 
+  const FAST_TURN_SELECTORS = SELECTORS.messages.turnCandidates.filter((selector) => selector !== "main > div");
   const EXTENSION_OWNED_SELECTOR = SELECTORS.extensionOwned.join(",");
   const COMPOSER_SELECTOR = SELECTORS.composer.join(",");
   const PAGE_NETWORK_EVENT_LIMIT = 80;
@@ -374,6 +381,174 @@
     });
   }
 
+  function collapseAddedHistoricalTurns(mutations) {
+    if (isNearConversationBottom()) {
+      return 0;
+    }
+
+    const root = findConversationRoot();
+    if (!root) {
+      return 0;
+    }
+
+    const candidates = getAddedTurnCandidates(mutations, root);
+    let collapsed = 0;
+
+    for (const node of candidates) {
+      if (collapsed >= FAST_COLLAPSE.maxTurnsPerMutation) {
+        break;
+      }
+
+      if (!(node instanceof HTMLElement) || !node.isConnected) {
+        continue;
+      }
+      if (node.dataset[DATA_KEYS.placeholder] === "true" || isInsideIgnoredArea(node)) {
+        continue;
+      }
+      if (!looksLikeMessageTurn(node) || detectMessageRole(node) !== "assistant") {
+        continue;
+      }
+
+      const record = getOrCreateMessageRecord(node, getMessageCandidateIndex(root, node));
+      if (!record || shouldKeepExpanded(record)) {
+        continue;
+      }
+
+      collapseMessageSync(record.id, { manual: false });
+      if (isCollapsed(record.id)) {
+        collapsed += 1;
+      }
+    }
+
+    if (collapsed > 0) {
+      debugLog("fast collapsed historical turns", { collapsed });
+    }
+    return collapsed;
+  }
+
+  function getAddedTurnCandidates(mutations, root) {
+    const candidates = [];
+    const seen = new Set();
+
+    mutations.forEach((mutation) => {
+      if (mutation.type !== "childList" || isInsideIgnoredArea(mutation.target)) {
+        return;
+      }
+
+      mutation.addedNodes.forEach((node) => {
+        const element = getElementFromNode(node);
+        if (!element || isInsideIgnoredArea(element) || !root.contains(element)) {
+          return;
+        }
+
+        collectTurnCandidatesFromElement(element).forEach((candidate) => {
+          if (!seen.has(candidate)) {
+            seen.add(candidate);
+            candidates.push(candidate);
+          }
+        });
+      });
+    });
+
+    return candidates;
+  }
+
+  function collectTurnCandidatesFromElement(element) {
+    const candidates = [];
+
+    if (elementMatchesAny(element, FAST_TURN_SELECTORS)) {
+      candidates.push(element);
+    }
+
+    candidates.push(...queryCandidates(element, FAST_TURN_SELECTORS));
+    return candidates;
+  }
+
+  function elementMatchesAny(element, selectors) {
+    return selectors.some((selector) => {
+      try {
+        return element.matches(selector);
+      } catch (error) {
+        handleSoftError(error);
+        return false;
+      }
+    });
+  }
+
+  function getMessageCandidateIndex(root, node) {
+    const candidates = uniqueElements(queryCandidates(root, SELECTORS.messages.turnCandidates));
+    const index = candidates.indexOf(node);
+    return index >= 0 ? index : state.messageRecords.size;
+  }
+
+  function shouldKeepExpanded(record) {
+    return state.sessionState.lockedExpanded[record.id] === true
+      || state.sessionState.manualExpanded[record.id] === true;
+  }
+
+  function isNearConversationBottom() {
+    const distance = getScrollDistanceToBottom();
+    const threshold = Math.max(
+      FAST_COLLAPSE.bottomDistancePx,
+      window.innerHeight * FAST_COLLAPSE.bottomDistanceViewports
+    );
+    return distance <= threshold;
+  }
+
+  function getScrollDistanceToBottom() {
+    const root = findConversationRoot();
+    const candidates = [document.scrollingElement, root, ...getConversationScrollCandidates(root), ...getElementAncestors(root)]
+      .filter((node, index, list) => node && list.indexOf(node) === index);
+
+    const distances = candidates
+      .map(getScrollableDistance)
+      .filter((distance) => Number.isFinite(distance));
+
+    if (!distances.length) {
+      return 0;
+    }
+    return Math.max(0, Math.min(...distances));
+  }
+
+  function getConversationScrollCandidates(root) {
+    if (!root) {
+      return [];
+    }
+
+    return uniqueElements(queryCandidates(root, [
+      "[data-testid='conversation-panel']",
+      "[data-testid='conversation-panel-content']",
+      ".overflow-y-auto"
+    ])).filter((node) => node instanceof HTMLElement);
+  }
+
+  function getElementAncestors(node) {
+    const ancestors = [];
+    let current = node && node.parentElement;
+    while (current && current !== document.body) {
+      ancestors.push(current);
+      current = current.parentElement;
+    }
+    return ancestors;
+  }
+
+  function getScrollableDistance(node) {
+    if (!(node instanceof Element)) {
+      return Number.POSITIVE_INFINITY;
+    }
+
+    const clientHeight = node === document.scrollingElement ? window.innerHeight : node.clientHeight;
+    const scrollHeight = node.scrollHeight;
+    if (scrollHeight <= clientHeight + 24) {
+      return Number.POSITIVE_INFINITY;
+    }
+
+    const scrollTop = node === document.scrollingElement
+      ? window.scrollY || node.scrollTop
+      : node.scrollTop;
+    return scrollHeight - scrollTop - clientHeight;
+  }
+
   function isInsideIgnoredArea(node) {
     const element = getElementFromNode(node);
     if (!element) {
@@ -411,10 +586,11 @@
         return;
       }
 
+      const fastCollapsed = collapseAddedHistoricalTurns(mutations);
       const relevant = mutations.some(isRelevantMutation);
 
-      if (relevant) {
-        scheduleScan("mutation", { urgent: true });
+      if (relevant || fastCollapsed > 0) {
+        scheduleScan("mutation", { urgent: fastCollapsed === 0 });
       }
     });
 
@@ -773,15 +949,16 @@
   function applyVirtualization(messages) {
     const keepRecentCount = Math.max(1, Number(state.settings.keepRecentCount) || DEFAULT_SETTINGS.keepRecentCount);
     const lastExpandableIndex = Math.max(0, messages.length - 1);
+    const nearConversationBottom = isNearConversationBottom();
 
     messages.forEach((record, index) => {
       record.collapsed = isCollapsed(record.id);
       record.locked = state.sessionState.lockedExpanded[record.id] === true;
       record.manuallyExpanded = state.sessionState.manualExpanded[record.id] === true;
 
-      const isLatest = index === lastExpandableIndex;
-      const keepBecauseRecent = index >= messages.length - keepRecentCount;
-      const keepBecauseManual = record.locked || record.manuallyExpanded;
+      const isLatest = nearConversationBottom && index === lastExpandableIndex;
+      const keepBecauseRecent = nearConversationBottom && index >= messages.length - keepRecentCount;
+      const keepBecauseManual = shouldKeepExpanded(record);
       const shouldPreferCollapse = state.settings.autoCollapseComplex
         ? (record.complex || !keepBecauseRecent)
         : !keepBecauseRecent;
