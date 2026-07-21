@@ -104,18 +104,19 @@
     },
     messages: {
       turnCandidates: [
+        "[data-message-author-role='assistant']",
+        "[data-message-author-role='user']",
+        "[data-message-id]",
         "article[data-testid^='conversation-turn-']",
         "[data-testid^='conversation-turn-']",
         "article",
-        "[role='article']",
-        "main > div"
+        "[role='article']"
       ],
       assistantHints: [
         "[data-message-author-role='assistant']",
         "[data-testid*='assistant']",
         "[aria-label*='Assistant']",
-        "[alt='ChatGPT']",
-        "svg title"
+        "[alt='ChatGPT']"
       ],
       userHints: [
         "[data-message-author-role='user']",
@@ -155,7 +156,12 @@
     collapsedCache: new Map(),
     placeholderMap: new Map(),
     observer: null,
+    observedRoot: null,
     scanTimer: null,
+    scrollEndTimer: null,
+    isScrolling: false,
+    scanInProgress: false,
+    pendingScan: false,
     debugCounter: 0,
     lastUrl: location.href,
     latestToastTimer: 0
@@ -180,6 +186,19 @@
 
   function bindRuntimeEvents() {
     startObserver();
+
+    window.addEventListener("scroll", () => {
+      state.isScrolling = true;
+      state.pendingScan = true;
+      clearTimeout(state.scrollEndTimer);
+      state.scrollEndTimer = window.setTimeout(() => {
+        state.isScrolling = false;
+        if (state.pendingScan) {
+          state.pendingScan = false;
+          scheduleScan("scroll settled");
+        }
+      }, 450);
+    }, { passive: true, capture: true });
 
     chrome.storage.onChanged.addListener((changes, areaName) => {
       if (areaName !== "local") {
@@ -214,6 +233,7 @@
     window.addEventListener("beforeunload", () => {
       disconnectObserver();
       clearTimeout(state.scanTimer);
+      clearTimeout(state.scrollEndTimer);
     });
 
     setInterval(() => {
@@ -238,12 +258,21 @@
 
   function startObserver() {
     disconnectObserver();
+    const root = findConversationRoot() || document.body;
+    if (!root) {
+      return;
+    }
+
+    state.observedRoot = root;
     state.observer = new MutationObserver((mutations) => {
-      if (!state.settings.enabled) {
+      if (!state.settings.enabled || state.scanInProgress) {
         return;
       }
 
       const relevant = mutations.some((mutation) => {
+        if (isExtensionNode(mutation.target)) {
+          return false;
+        }
         if (mutation.type === "childList" && (mutation.addedNodes.length || mutation.removedNodes.length)) {
           return true;
         }
@@ -254,11 +283,15 @@
       });
 
       if (relevant) {
+        state.pendingScan = true;
+        if (state.isScrolling) {
+          return;
+        }
         scheduleScan("mutation");
       }
     });
 
-    state.observer.observe(document.documentElement, {
+    state.observer.observe(root, {
       childList: true,
       subtree: true,
       characterData: true,
@@ -271,33 +304,51 @@
       state.observer.disconnect();
       state.observer = null;
     }
+    state.observedRoot = null;
   }
 
   function scheduleScan(reason) {
     clearTimeout(state.scanTimer);
+    state.pendingScan = true;
+    if (state.isScrolling) {
+      return;
+    }
     state.scanTimer = window.setTimeout(() => {
       scanAndApply(reason).catch((error) => {
         console.warn("[ChatGPT Thread Lite] scan failed", error);
       });
-    }, 180);
+    }, 320);
   }
 
   async function scanAndApply(reason) {
+    if (state.scanInProgress || state.isScrolling) {
+      state.pendingScan = true;
+      return;
+    }
+
     if (!state.settings.enabled) {
       restoreAllCollapsedNodesSilently();
       debugLog("scan skipped, disabled");
       return;
     }
 
-    const messages = collectAssistantMessages();
-    applyGlobalHeaderControls();
-    applyToolbarControls(messages);
-    applyVirtualization(messages);
-    cleanupStaleCaches(messages);
-    debugLog(`scan ${reason}`, {
-      assistantCount: messages.length,
-      collapsedCount: getCollapsedIds().length
-    });
+    state.scanInProgress = true;
+    state.pendingScan = false;
+    disconnectObserver();
+    try {
+      const messages = collectAssistantMessages();
+      applyGlobalHeaderControls(messages);
+      applyToolbarControls(messages);
+      applyVirtualization(messages);
+      cleanupStaleCaches(messages);
+      debugLog(`scan ${reason}`, {
+        assistantCount: messages.length,
+        collapsedCount: getCollapsedIds().length
+      });
+    } finally {
+      state.scanInProgress = false;
+      startObserver();
+    }
   }
 
   function collectAssistantMessages() {
@@ -307,7 +358,7 @@
     }
 
     const candidates = uniqueElements(queryCandidates(root, SELECTORS.messages.turnCandidates));
-    const assistantMessages = [];
+    const assistantMessages = new Map();
 
     candidates.forEach((node, index) => {
       if (!(node instanceof HTMLElement)) {
@@ -328,18 +379,18 @@
         return;
       }
 
-      assistantMessages.push(record);
+      assistantMessages.set(record.id, record);
     });
 
-    assistantMessages.sort((a, b) => a.index - b.index);
-    assistantMessages.forEach((record, index) => {
+    const records = Array.from(assistantMessages.values()).sort((a, b) => a.index - b.index);
+    records.forEach((record, index) => {
       record.order = index;
       if (record.node && record.node.dataset) {
         record.node.dataset[`${camelCase(EXTENSION_PREFIX)}MessageId`] = record.id;
       }
     });
 
-    return assistantMessages;
+    return records;
   }
 
   function findConversationRoot() {
@@ -362,8 +413,15 @@
     if (!node.isConnected) {
       return false;
     }
+    if (isExtensionNode(node)) {
+      return false;
+    }
     const text = getNodeText(node);
     if (!text) {
+      return false;
+    }
+    const hasMessageMarker = node.matches("[data-message-author-role], [data-message-id], [data-testid^='conversation-turn-'], article, [role='article']");
+    if (!hasMessageMarker) {
       return false;
     }
     const hasHint = SELECTORS.messages.contentHints.some((selector) => node.querySelector(selector));
@@ -392,29 +450,25 @@
       return "user";
     }
 
-    const labelText = (node.textContent || "").slice(0, 80);
-    if (/chatgpt/i.test(labelText)) {
-      return "assistant";
-    }
-
     return "unknown";
   }
 
   function getOrCreateMessageRecord(node, fallbackIndex) {
-    const summary = createTextSummary(node);
+    const messageNode = resolveMessageContainer(node);
+    const summary = createTextSummary(messageNode);
     if (!summary) {
       return null;
     }
 
-    const id = buildMessageId(node, summary, fallbackIndex);
+    const id = buildMessageId(messageNode, summary, fallbackIndex);
     const existing = state.messageRecords.get(id) || {};
     const record = {
       id,
-      node,
+      node: messageNode,
       summary,
       index: fallbackIndex,
       order: existing.order || fallbackIndex,
-      complex: detectComplexity(node),
+      complex: detectComplexity(messageNode),
       hasToolbar: existing.hasToolbar || false,
       collapsed: state.sessionState.collapsed[id] === true,
       locked: state.sessionState.lockedExpanded[id] === true,
@@ -422,6 +476,13 @@
     };
     state.messageRecords.set(id, record);
     return record;
+  }
+
+  function resolveMessageContainer(node) {
+    const container = node.closest(
+      "article[data-testid^='conversation-turn-'], [data-testid^='conversation-turn-'], article, [role='article']"
+    );
+    return container instanceof HTMLElement ? container : node;
   }
 
   function buildMessageId(node, summary, fallbackIndex) {
@@ -453,7 +514,7 @@
     });
   }
 
-  function applyGlobalHeaderControls() {
+  function applyGlobalHeaderControls(messages) {
     const anchor = findGlobalHeaderAnchor();
     if (!anchor) {
       return;
@@ -479,7 +540,7 @@
     const expandAllBtn = container.querySelector("[data-action='global-expand-all']");
     const collapseAllBtn = container.querySelector("[data-action='global-collapse-all']");
     const collapsedCount = getCollapsedIds().length;
-    const assistantCount = collectAssistantMessages().length;
+    const assistantCount = messages.length;
 
     if (expandAllBtn) {
       expandAllBtn.disabled = state.settings.extremeMemoryMode || collapsedCount === 0;
@@ -598,6 +659,12 @@
   function collapseMessageSync(messageId, options) {
     const record = state.messageRecords.get(messageId);
     if (!record || !record.node || !record.node.isConnected) {
+      return;
+    }
+
+    const conversationRoot = findConversationRoot();
+    if (conversationRoot && (record.node === conversationRoot || record.node.contains(conversationRoot))) {
+      debugLog("skip unsafe message container", { messageId });
       return;
     }
 
@@ -1003,6 +1070,16 @@
     };
     const textLength = getNodeText(node).length;
     return counts.code > 0 || counts.math > 0 || counts.table > 0 || counts.list >= 6 || counts.quote >= 3 || textLength > 3200;
+  }
+
+  function isExtensionNode(node) {
+    const element = node instanceof Element ? node : node && node.parentElement;
+    if (!element) {
+      return false;
+    }
+    return Boolean(element.closest(
+      `.${EXTENSION_PREFIX}-placeholder, .${EXTENSION_PREFIX}-toolbar, .${EXTENSION_PREFIX}-global-controls, .${EXTENSION_PREFIX}-toast`
+    ));
   }
 
   function queryCandidates(root, selectors) {
