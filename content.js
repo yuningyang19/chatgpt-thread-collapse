@@ -10,6 +10,7 @@
   const DEFAULT_SETTINGS = {
     enabled: true,
     keepRecentCount: 6,
+    keepLatestOnly: true,
     autoCollapseComplex: true,
     extremeMemoryMode: false,
     debugMode: false,
@@ -382,7 +383,7 @@
       assistantMessages.set(record.id, record);
     });
 
-    const records = Array.from(assistantMessages.values()).sort((a, b) => a.index - b.index);
+    const records = Array.from(assistantMessages.values()).sort(compareMessageOrder);
     records.forEach((record, index) => {
       record.order = index;
       if (record.node && record.node.dataset) {
@@ -391,6 +392,23 @@
     });
 
     return records;
+  }
+
+  function compareMessageOrder(left, right) {
+    if (left.node === right.node) {
+      return 0;
+    }
+    if (!left.node || !right.node || !left.node.isConnected || !right.node.isConnected) {
+      return left.index - right.index;
+    }
+    const position = left.node.compareDocumentPosition(right.node);
+    if (position & Node.DOCUMENT_POSITION_FOLLOWING) {
+      return -1;
+    }
+    if (position & Node.DOCUMENT_POSITION_PRECEDING) {
+      return 1;
+    }
+    return left.index - right.index;
   }
 
   function findConversationRoot() {
@@ -630,7 +648,9 @@
       record.manuallyExpanded = state.sessionState.manualExpanded[record.id] === true;
 
       const isLatest = index === lastExpandableIndex;
-      const keepBecauseRecent = index >= messages.length - keepRecentCount;
+      const keepBecauseRecent = state.settings.keepLatestOnly
+        ? isLatest
+        : index >= messages.length - keepRecentCount;
       const keepBecauseManual = record.locked || record.manuallyExpanded;
       const shouldPreferCollapse = state.settings.autoCollapseComplex
         ? (record.complex || !keepBecauseRecent)

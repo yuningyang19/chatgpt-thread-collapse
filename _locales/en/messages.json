@@ -17,6 +17,9 @@
   "recentKeepCount": {
     "message": "Keep the latest assistant messages expanded"
   },
+  "keepLatestOnly": {
+    "message": "Keep only the latest assistant message expanded"
+  },
   "collapseComplex": {
     "message": "Prefer collapsing code/math-heavy old messages"
   },

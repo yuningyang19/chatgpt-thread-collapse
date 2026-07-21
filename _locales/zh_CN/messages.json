@@ -17,6 +17,9 @@
   "recentKeepCount": {
     "message": "最近保留展开的 assistant 条数"
   },
+  "keepLatestOnly": {
+    "message": "只保留最新一条 assistant 展开"
+  },
   "collapseComplex": {
     "message": "优先折叠含代码 / 公式的旧消息"
   },

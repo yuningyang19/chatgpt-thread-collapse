@@ -4,6 +4,7 @@
   const DEFAULT_SETTINGS = {
     enabled: true,
     keepRecentCount: 6,
+    keepLatestOnly: true,
     autoCollapseComplex: true,
     extremeMemoryMode: false,
     debugMode: false,
@@ -39,6 +40,7 @@
   const elements = {
     enabled: document.getElementById("enabled"),
     keepRecentCount: document.getElementById("keepRecentCount"),
+    keepLatestOnly: document.getElementById("keepLatestOnly"),
     autoCollapseComplex: document.getElementById("autoCollapseComplex"),
     extremeMemoryMode: document.getElementById("extremeMemoryMode"),
     debugMode: document.getElementById("debugMode"),
@@ -85,6 +87,7 @@
 
     setLabelText("enabled", t("enableExtension"));
     setLabelText("keepRecentCount", t("recentKeepCount"));
+    setLabelText("keepLatestOnly", t("keepLatestOnly"));
     setLabelText("autoCollapseComplex", t("collapseComplex"));
     setLabelText("extremeMemoryMode", t("extremeMemoryMode"));
     setLabelText("debugMode", t("debugMode"));
@@ -119,9 +122,11 @@
   function renderSettings(settings) {
     elements.enabled.checked = Boolean(settings.enabled);
     elements.keepRecentCount.value = String(settings.keepRecentCount);
+    elements.keepLatestOnly.checked = Boolean(settings.keepLatestOnly);
     elements.autoCollapseComplex.checked = Boolean(settings.autoCollapseComplex);
     elements.extremeMemoryMode.checked = Boolean(settings.extremeMemoryMode);
     elements.debugMode.checked = Boolean(settings.debugMode);
+    syncRecentCountAvailability();
   }
 
   function bindSettings() {
@@ -129,6 +134,7 @@
       const nextSettings = {
         enabled: elements.enabled.checked,
         keepRecentCount: clampNumber(elements.keepRecentCount.value, 1, 50, DEFAULT_SETTINGS.keepRecentCount),
+        keepLatestOnly: elements.keepLatestOnly.checked,
         autoCollapseComplex: elements.autoCollapseComplex.checked,
         extremeMemoryMode: elements.extremeMemoryMode.checked,
         debugMode: elements.debugMode.checked,
@@ -137,15 +143,21 @@
 
       await chrome.storage.local.set({ settings: nextSettings });
       elements.saveStatus.textContent = t("saveStatus");
+      syncRecentCountAvailability();
       await notifyActiveTab({ type: "settingsUpdated" });
       await refreshPageState();
     };
 
     elements.enabled.addEventListener("change", onChange);
     elements.keepRecentCount.addEventListener("change", onChange);
+    elements.keepLatestOnly.addEventListener("change", onChange);
     elements.autoCollapseComplex.addEventListener("change", onChange);
     elements.extremeMemoryMode.addEventListener("change", onChange);
     elements.debugMode.addEventListener("change", onChange);
+  }
+
+  function syncRecentCountAvailability() {
+    elements.keepRecentCount.disabled = elements.keepLatestOnly.checked;
   }
 
   function bindActions() {
