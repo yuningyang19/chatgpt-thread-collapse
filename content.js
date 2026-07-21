@@ -689,6 +689,7 @@
     }
 
     if (isCollapsed(messageId)) {
+      hideCollapsedSource(record.node);
       return;
     }
 
@@ -700,12 +701,16 @@
     const placeholder = createPlaceholder(record, summary);
     const originalNode = record.node;
     const previousAriaHidden = originalNode.getAttribute("aria-hidden");
+    const previousDisplay = originalNode.style.getPropertyValue("display");
+    const previousDisplayPriority = originalNode.style.getPropertyPriority("display");
 
     if (!state.settings.extremeMemoryMode) {
       state.collapsedCache.set(messageId, {
         node: originalNode,
         summary,
         previousAriaHidden,
+        previousDisplay,
+        previousDisplayPriority,
         collapsedAt: Date.now()
       });
     } else {
@@ -713,8 +718,7 @@
     }
 
     try {
-      originalNode.classList.add(`${EXTENSION_PREFIX}-source-collapsed`);
-      originalNode.setAttribute("aria-hidden", "true");
+      hideCollapsedSource(originalNode);
       originalNode.parentNode.insertBefore(placeholder, originalNode);
       state.placeholderMap.set(messageId, placeholder);
       state.sessionState.collapsed[messageId] = true;
@@ -723,12 +727,11 @@
       record.collapsed = true;
       syncPlaceholderState(record, placeholder);
     } catch (error) {
-      originalNode.classList.remove(`${EXTENSION_PREFIX}-source-collapsed`);
-      if (previousAriaHidden === null) {
-        originalNode.removeAttribute("aria-hidden");
-      } else {
-        originalNode.setAttribute("aria-hidden", previousAriaHidden);
-      }
+      restoreCollapsedSource(originalNode, {
+        previousAriaHidden,
+        previousDisplay,
+        previousDisplayPriority
+      });
       placeholder.remove();
       handleSoftError(error);
     }
@@ -763,12 +766,7 @@
 
     try {
       placeholder.remove();
-      cached.node.classList.remove(`${EXTENSION_PREFIX}-source-collapsed`);
-      if (cached.previousAriaHidden === null) {
-        cached.node.removeAttribute("aria-hidden");
-      } else {
-        cached.node.setAttribute("aria-hidden", cached.previousAriaHidden);
-      }
+      restoreCollapsedSource(cached.node, cached);
       state.placeholderMap.delete(messageId);
       delete state.sessionState.collapsed[messageId];
       if (options && options.persist) {
@@ -825,6 +823,32 @@
     actions.append(expandBtn, lockBtn, restoreBtn);
     placeholder.append(summaryNode, actions);
     return placeholder;
+  }
+
+  function hideCollapsedSource(node) {
+    if (!node || !(node instanceof HTMLElement)) {
+      return;
+    }
+    node.classList.add(`${EXTENSION_PREFIX}-source-collapsed`);
+    node.style.setProperty("display", "none", "important");
+    node.setAttribute("aria-hidden", "true");
+  }
+
+  function restoreCollapsedSource(node, cached) {
+    if (!node || !(node instanceof HTMLElement)) {
+      return;
+    }
+    node.classList.remove(`${EXTENSION_PREFIX}-source-collapsed`);
+    if (cached && cached.previousDisplay) {
+      node.style.setProperty("display", cached.previousDisplay, cached.previousDisplayPriority || "");
+    } else {
+      node.style.removeProperty("display");
+    }
+    if (!cached || cached.previousAriaHidden === null || cached.previousAriaHidden === undefined) {
+      node.removeAttribute("aria-hidden");
+    } else {
+      node.setAttribute("aria-hidden", cached.previousAriaHidden);
+    }
   }
 
   function syncPlaceholderState(record, placeholder) {
