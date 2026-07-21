@@ -4,7 +4,7 @@ A very long ChatGPT web conversation can become noticeably sluggish, so this pro
 
 This project was built in a vibe coding style using Codex.
 
-It is a local Chrome extension for long ChatGPT threads. The extension semi-virtualizes older assistant messages so the page keeps fewer heavy DOM nodes in memory, which helps reduce lag without breaking the ability to restore content later.
+It is a local Chrome extension for long ChatGPT threads. The extension semi-virtualizes older assistant messages so fewer heavy nodes actively participate in layout and painting, which helps reduce lag without breaking ChatGPT's own message tree.
 
 ## What it does
 
@@ -16,14 +16,14 @@ It is a local Chrome extension for long ChatGPT threads. The extension semi-virt
 
 ## Why it helps
 
-Long ChatGPT threads slow down because too many assistant messages stay mounted in the DOM. This extension detaches old heavy nodes and replaces them with compact placeholders, which reduces layout work and makes long conversations feel lighter.
+Long ChatGPT threads slow down because too many assistant messages stay active in layout and painting. This extension keeps the original React message nodes mounted for compatibility, hides their heavy rendering, and places compact placeholders in the layout instead.
 
 That means:
 
 - Less DOM pressure while scrolling
 - Lower layout and paint cost on long conversations
 - Manual control over what stays expanded
-- A more robust approach than pure CSS folding, because the heavy nodes are actually removed from the layout flow
+- A compatibility-first approach that avoids replacing React-managed message nodes
 
 ## Install
 

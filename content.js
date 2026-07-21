@@ -699,11 +699,13 @@
     const summary = record.summary || createTextSummary(record.node);
     const placeholder = createPlaceholder(record, summary);
     const originalNode = record.node;
+    const previousAriaHidden = originalNode.getAttribute("aria-hidden");
 
     if (!state.settings.extremeMemoryMode) {
       state.collapsedCache.set(messageId, {
         node: originalNode,
         summary,
+        previousAriaHidden,
         collapsedAt: Date.now()
       });
     } else {
@@ -711,15 +713,23 @@
     }
 
     try {
-      originalNode.replaceWith(placeholder);
+      originalNode.classList.add(`${EXTENSION_PREFIX}-source-collapsed`);
+      originalNode.setAttribute("aria-hidden", "true");
+      originalNode.parentNode.insertBefore(placeholder, originalNode);
       state.placeholderMap.set(messageId, placeholder);
       state.sessionState.collapsed[messageId] = true;
       delete state.sessionState.manualExpanded[messageId];
-      record.node = placeholder;
       record.summary = summary;
       record.collapsed = true;
       syncPlaceholderState(record, placeholder);
     } catch (error) {
+      originalNode.classList.remove(`${EXTENSION_PREFIX}-source-collapsed`);
+      if (previousAriaHidden === null) {
+        originalNode.removeAttribute("aria-hidden");
+      } else {
+        originalNode.setAttribute("aria-hidden", previousAriaHidden);
+      }
+      placeholder.remove();
       handleSoftError(error);
     }
 
@@ -752,7 +762,13 @@
     }
 
     try {
-      placeholder.replaceWith(cached.node);
+      placeholder.remove();
+      cached.node.classList.remove(`${EXTENSION_PREFIX}-source-collapsed`);
+      if (cached.previousAriaHidden === null) {
+        cached.node.removeAttribute("aria-hidden");
+      } else {
+        cached.node.setAttribute("aria-hidden", cached.previousAriaHidden);
+      }
       state.placeholderMap.delete(messageId);
       delete state.sessionState.collapsed[messageId];
       if (options && options.persist) {

@@ -40,6 +40,11 @@
   vertical-align: middle;
 }
 
+/* Keep React's message node mounted; hide it while the placeholder owns the layout. */
+.cgpt-lite-source-collapsed {
+  display: none !important;
+}
+
 .cgpt-lite-btn {
   appearance: none;
   border: 1px solid var(--ctl-border);
